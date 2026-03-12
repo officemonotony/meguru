@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/app/context/AuthContext'
+import { sendNotification } from '@/lib/notify'
 
 // ========== 型定義 ==========
 export interface SeasonPeriod {
@@ -642,6 +643,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       else {
         // ローカルIDをSupabaseのUUIDで更新
         setDeliverySchedules(prev => prev.map(s => s.id === schedule.id ? { ...s, id: orderData.id } : s))
+        // 農家に新規注文を通知
+        sendNotification('new_order', schedule.farmerId, {
+          restaurantName: schedule.restaurantName,
+          productName: schedule.productName || schedule.items?.[0]?.productName || '',
+          deliveryDate: schedule.deliveryDate,
+        })
       }
     } catch (e) {
       console.error('注文保存エラー:', e)
@@ -656,7 +663,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       delivery_date: updates.deliveryDate,
       total_amount: updates.totalAmount,
     }).eq('id', id)
-    if (error) console.error('注文更新エラー:', error)
+    if (error) { console.error('注文更新エラー:', error); return }
+    // 承認時に飲食店へ通知
+    if (updates.status === 'approved') {
+      const schedule = deliverySchedules.find(s => s.id === id)
+      if (schedule) {
+        sendNotification('order_approved', schedule.restaurantId, {
+          farmerName: schedule.farmerName,
+          productName: schedule.productName || schedule.items?.[0]?.productName || '',
+          deliveryDate: schedule.deliveryDate,
+        })
+      }
+    }
   }
 
   // ========== 提案（ローカル）==========
@@ -666,26 +684,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const updateProposal = (id: string, status: 'active' | 'accepted' | 'rejected') => {
     setProposals(prev => prev.map(p => p.id === id ? { ...p, status } : p))
+    const proposal = proposals.find(p => p.id === id)
+    if (!proposal) return
+
+    // 飲食店へ承認/却下を通知
+    sendNotification(
+      status === 'rejected' ? 'proposal_rejected' : 'proposal_accepted',
+      proposal.restaurantId,
+      { farmerName: proposal.farmerName, productName: proposal.productName }
+    )
+
     if (status === 'active' || status === 'accepted') {
-      const proposal = proposals.find(p => p.id === id)
-      if (proposal) {
-        setActiveSubscriptions(prev => [...prev, {
-          id: `sub-${id}`,
-          restaurantId: proposal.restaurantId,
-          restaurantName: proposal.restaurantName,
-          farmerId: proposal.farmerId,
-          farmerName: proposal.farmerName,
-          productName: proposal.productName,
-          quantity: proposal.quantity,
-          unit: proposal.unit,
-          frequency: proposal.frequency,
-          deliveryDay: proposal.deliveryDay,
-          pricePerDelivery: proposal.pricePerDelivery,
-          totalDeliveries: proposal.totalDeliveries,
-          startDate: proposal.startDate,
-          status: 'active',
-        }])
-      }
+      setActiveSubscriptions(prev => [...prev, {
+        id: `sub-${id}`,
+        restaurantId: proposal.restaurantId,
+        restaurantName: proposal.restaurantName,
+        farmerId: proposal.farmerId,
+        farmerName: proposal.farmerName,
+        productName: proposal.productName,
+        quantity: proposal.quantity,
+        unit: proposal.unit,
+        frequency: proposal.frequency,
+        deliveryDay: proposal.deliveryDay,
+        pricePerDelivery: proposal.pricePerDelivery,
+        totalDeliveries: proposal.totalDeliveries,
+        startDate: proposal.startDate,
+        status: 'active',
+      }])
     }
   }
 
