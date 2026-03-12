@@ -352,7 +352,10 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
 
   return (
     <>
-        <div className="p-4">
+        <div className="p-4 md:p-6">
+          <div className="md:grid md:grid-cols-[340px_1fr] md:gap-6">
+          {/* 左カラム: カレンダー */}
+          <div className="md:sticky md:top-6 md:self-start">
           {/* カレンダー */}
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
             <div className="flex items-center justify-between mb-4">
@@ -436,7 +439,7 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
                 );
               })}
             </div>
-          </div>
+          </div>{/* カレンダーcard終わり */}
 
           {/* 選択した日付の注文サマリー */}
           {selectedDay !== null && (() => {
@@ -473,6 +476,10 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
             );
           })()}
 
+          </div>{/* 左カラム終わり */}
+
+          {/* 右カラム: ステータスとリスト */}
+          <div>
           {/* D: ステータスタブ - 4列 */}
           <div className="bg-white rounded-2xl border-2 border-gray-300 mb-4 overflow-hidden">
             <div className="grid grid-cols-4 divide-x-2 divide-gray-300">
@@ -557,6 +564,8 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
               </div>
             )}
           </div>
+          </div>{/* 右カラム終わり */}
+          </div>{/* グリッド終わり */}
         </div>
 
       {/* A: 承認取消確認モーダル */}

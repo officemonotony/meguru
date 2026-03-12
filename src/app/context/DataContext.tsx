@@ -135,12 +135,23 @@ export interface Chat {
   restaurantId?: string
 }
 
+export interface HarvestLog {
+  id: string
+  type: 'initial' | 'additional'
+  quantity: number
+  memo?: string
+  createdAt: string
+}
+
 export interface Crop {
   id: string
   name: string
   totalStock: number
   unit: string
   imageUrl?: string
+  memo?: string
+  harvestLogs: HarvestLog[]
+  createdAt: string
 }
 
 export const RESTAURANT_INFO = {
@@ -181,6 +192,10 @@ export interface DataContextType {
   addSubscription: (sub: ActiveSubscription) => void
 
   getCropRemainingStock: (cropId: string) => number
+  addCrop: (crop: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => void
+  updateCrop: (id: string, updates: Partial<Crop>) => void
+  deleteCrop: (id: string) => void
+  addHarvestLog: (cropId: string, quantity: number, memo?: string) => void
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -193,7 +208,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [deliverySchedules, setDeliverySchedules] = useState<DeliverySchedule[]>([])
   const [proposals, setProposals] = useState<Proposal[]>([])
   const [activeSubscriptions, setActiveSubscriptions] = useState<ActiveSubscription[]>([])
-  const [crops] = useState<Crop[]>([])
+  const [crops, setCrops] = useState<Crop[]>([])
   const [unreadCounts, setUnreadCounts] = useState<Record<string, { farmer: number; restaurant: number }>>({})
   const [loading, setLoading] = useState(false)
 
@@ -531,6 +546,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return crop.totalStock - allocated
   }
 
+  const addCrop = (cropData: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => {
+    const now = new Date().toISOString()
+    const newCrop: Crop = {
+      ...cropData,
+      id: `crop-${Date.now()}`,
+      harvestLogs: [{
+        id: `log-${Date.now()}`,
+        type: 'initial',
+        quantity: cropData.totalStock,
+        memo: cropData.memo,
+        createdAt: now,
+      }],
+      createdAt: now,
+    }
+    setCrops(prev => [...prev, newCrop])
+  }
+
+  const updateCrop = (id: string, updates: Partial<Crop>) => {
+    setCrops(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+  }
+
+  const deleteCrop = (id: string) => {
+    const linked = products.some(p => p.cropId === id)
+    if (linked) throw new Error('この作物に紐づく商品があります')
+    setCrops(prev => prev.filter(c => c.id !== id))
+  }
+
+  const addHarvestLog = (cropId: string, quantity: number, memo?: string) => {
+    const log: HarvestLog = {
+      id: `log-${Date.now()}`,
+      type: 'additional',
+      quantity,
+      memo,
+      createdAt: new Date().toISOString(),
+    }
+    setCrops(prev => prev.map(c => c.id === cropId ? {
+      ...c,
+      totalStock: c.totalStock + quantity,
+      harvestLogs: [...c.harvestLogs, log],
+    } : c))
+  }
+
   return (
     <DataContext.Provider value={{
       products, chats, messages, deliverySchedules, proposals, activeSubscriptions, unreadCounts, crops, loading,
@@ -540,7 +597,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addProposal, updateProposal,
       addActiveSubscription,
       addSubscription: (sub: ActiveSubscription) => addActiveSubscription(sub),
-      getCropRemainingStock,
+      getCropRemainingStock, addCrop, updateCrop, deleteCrop, addHarvestLog,
     }}>
       {children}
     </DataContext.Provider>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, Package, MessageCircle, Calendar, Receipt, Truck } from 'lucide-react';
+import { LogOut, Package, MessageCircle, Calendar, Receipt, Truck, Sprout } from 'lucide-react';
 import { ChatList } from '@/app/components/ChatList';
 import { ChatRoom } from '@/app/components/ChatRoom';
 import { FarmerSubscriptionTab } from '@/app/components/FarmerSubscriptionTab';
@@ -23,16 +23,12 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
   const [ordersInitialTab, setOrdersInitialTab] = useState<'ordered' | 'approved' | 'delivered' | 'paid' | undefined>(undefined);
   const [deliveryInitialTab, setDeliveryInitialTab] = useState<'ordered' | 'approved' | 'delivered' | 'paid' | undefined>(undefined);
 
-  // 注文管理バッジ用：未対応の単発注文数 + 未応の継続提案数をカウント
   const orderBadgeCount = (() => {
-    // 未承認の単発注文数（配送依頼メッセージカウント）
     let oneTimeCount = 0;
     Object.entries(messages).forEach(([, chatMessages]) => {
       chatMessages.forEach((message, idx) => {
         if (message.text?.includes('【配送依頼】') && message.sender === 'restaurant') {
-          // 承認済み・変更提案済み・お断り済みは除外
           const schedule = deliverySchedules.find(d => d.id === `onetime-${message.id}`);
-          // スケジュールが存在し、かつステータスがordered以外（=承認済み以降）なら除外
           if (schedule && schedule.status !== 'ordered') return;
           const after = chatMessages.slice(idx + 1);
           const hasCounterOrDecline = after.some(m =>
@@ -44,21 +40,18 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
         }
       });
     });
-    // 未対応の継続提案数
     const pendingProposalCount = proposals.filter(p => p.status === 'pending').length;
     return oneTimeCount + pendingProposalCount;
   })();
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
-    // チャットを開いたら既読にする
     markChatAsRead(chatId, 'farmer');
-    // チャットIDに基づいて名前とアバターを取得
     const chatData: { [key: string]: { name: string; avatar: string } } = {
       '1': { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl },
       'chat-farmer1': { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl },
       '2': { name: '和食処さくら', avatar: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200' },
-      '3': { name: 'カ��ェ緑', avatar: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=200' },
+      '3': { name: 'カフェ緑', avatar: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=200' },
     };
     const data = chatData[chatId] || { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl };
     setSelectedChatName(data.name);
@@ -72,7 +65,6 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
   };
 
   const handleOpenChatFromProposal = (restaurantId: string, restaurantName: string) => {
-    // レストランIDに基づいてチャットIDを決定（両方のID形式に対応）
     const chatIdMap: { [key: string]: string } = {
       'REST001': 'chat-farmer1',
       'REST002': '2',
@@ -82,8 +74,6 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
       'restaurant3': '3',
     };
     const chatId = chatIdMap[restaurantId] || 'chat-farmer1';
-    
-    // アバターを取得
     let avatar = RESTAURANT_INFO.avatarUrl;
     if (restaurantId !== 'REST001' && restaurantId !== 'restaurant1') {
       const avatarMap: { [key: string]: string } = {
@@ -94,143 +84,139 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
       };
       avatar = avatarMap[restaurantId] || RESTAURANT_INFO.avatarUrl;
     }
-    
     setSelectedChatId(chatId);
     setSelectedChatName(restaurantName);
     setSelectedChatAvatar(avatar);
-    // チャットを開いたら既読にする
     markChatAsRead(chatId, 'farmer');
     setActiveTab('chat');
   };
 
-  // handleOpenChatFromOrders は handleOpenChatFromProposal に統合済み
-
-  // チャットバッジ用：農家側の未読メッセージ合計
   const chatBadgeCount = getTotalUnread('farmer');
-
-  const handleNavigateToOrders = (tab?: 'ordered' | 'approved' | 'delivered' | 'paid') => {
-    setOrdersInitialTab(tab);
-    setActiveTab('orders');
-  };
-
-  // 未払い請求のバッジカウント（delivered状態の注文数）
   const billingBadgeCount = deliverySchedules.filter(d => d.status === 'delivered').length;
-
-  // お届けバッジ（approved状態＝配達待ちの注文数）
   const deliveryBadgeCount = deliverySchedules.filter(d => d.status === 'approved').length;
 
+  const navItems: { id: Tab; label: string; icon: React.ReactNode; badge?: number }[] = [
+    { id: 'products', label: 'うちの商品', icon: <Package className="w-5 h-5" /> },
+    { id: 'orders', label: '注文管理', icon: <Calendar className="w-5 h-5" />, badge: orderBadgeCount },
+    { id: 'chat', label: 'チャット', icon: <MessageCircle className="w-5 h-5" />, badge: chatBadgeCount },
+    { id: 'delivery', label: 'お届け', icon: <Truck className="w-5 h-5" />, badge: deliveryBadgeCount },
+    { id: 'billing', label: '売上', icon: <Receipt className="w-5 h-5" />, badge: billingBadgeCount },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
-        <h1 className="text-lg font-bold text-black">メグル</h1>
-        <button
-          onClick={onLogout}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <LogOut className="w-5 h-5 text-gray-600" />
-        </button>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className="hidden md:flex flex-col w-56 bg-white border-r border-gray-200 fixed top-0 left-0 bottom-0 z-30">
+        {/* Logo */}
+        <div className="h-14 flex items-center px-5 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-black rounded-lg flex items-center justify-center">
+              <Sprout className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-base font-bold text-black">メグル</span>
+          </div>
+        </div>
+
+        {/* Nav Items */}
+        <nav className="flex-1 py-4 px-3 space-y-1">
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+                activeTab === item.id
+                  ? 'bg-black text-white'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+              {item.badge && item.badge > 0 && (
+                <span className={`ml-auto text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 ${
+                  activeTab === item.id ? 'bg-white text-black' : 'bg-red-500 text-white'
+                }`}>
+                  {item.badge > 99 ? '99+' : item.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Logout */}
+        <div className="p-3 border-t border-gray-200">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>ログアウト</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 pb-16 pt-14">
-        {activeTab === 'products' && <FarmerProductTab />}
-        {activeTab === 'orders' && <FarmerSubscriptionTab onOpenChat={handleOpenChatFromProposal} onNavigateToDelivery={(tab) => { setDeliveryInitialTab(tab); setActiveTab('delivery'); }} />}
-        {activeTab === 'delivery' && <FarmerOrders onOpenChat={handleOpenChatFromProposal} initialTab={deliveryInitialTab} />}
-        {activeTab === 'billing' && <MonthlyInvoice userType="farmer" />}
-        {activeTab === 'chat' && (
-          <>
-            {selectedChatId ? (
-              <ChatRoom
-                chatId={selectedChatId}
-                chatName={selectedChatName}
-                avatarUrl={selectedChatAvatar}
-                onBack={handleBackToList}
-                userType="farmer"
-              />
-            ) : (
-              <ChatList userType="farmer" onSelectChat={handleSelectChat} />
-            )}
-          </>
-        )}
+      <div className="flex-1 md:ml-56 flex flex-col min-h-screen">
+        {/* Mobile Header */}
+        <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
+          <h1 className="text-lg font-bold text-black">メグル</h1>
+          <button onClick={onLogout} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <LogOut className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 md:pt-0 pt-14 pb-16 md:pb-0">
+          {activeTab === 'products' && <FarmerProductTab />}
+          {activeTab === 'orders' && (
+            <FarmerSubscriptionTab
+              onOpenChat={handleOpenChatFromProposal}
+              onNavigateToDelivery={(tab) => { setDeliveryInitialTab(tab); setActiveTab('delivery'); }}
+            />
+          )}
+          {activeTab === 'delivery' && (
+            <FarmerOrders onOpenChat={handleOpenChatFromProposal} initialTab={deliveryInitialTab} />
+          )}
+          {activeTab === 'billing' && <MonthlyInvoice userType="farmer" />}
+          {activeTab === 'chat' && (
+            <>
+              {selectedChatId ? (
+                <ChatRoom
+                  chatId={selectedChatId}
+                  chatName={selectedChatName}
+                  avatarUrl={selectedChatAvatar}
+                  onBack={handleBackToList}
+                  userType="farmer"
+                />
+              ) : (
+                <ChatList userType="farmer" onSelectChat={handleSelectChat} />
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">
         <div className="flex">
-          <button
-            onClick={() => setActiveTab('products')}
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'products' ? 'text-black' : 'text-gray-400'
-            }`}
-          >
-            <Package className="w-5 h-5" />
-            <span className="text-[10px]">うちの商品</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`relative flex flex-col items-center justify-center flex-1 py-3 ${
-              activeTab === 'orders' ? 'text-black' : 'text-gray-400'
-            }`}
-          >
-            <div className="relative">
-              <Calendar className="w-5 h-5" />
-              {orderBadgeCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-                  {orderBadgeCount > 99 ? '99+' : orderBadgeCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px]">注文</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('chat')}
-            className={`relative flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'chat' ? 'text-black' : 'text-gray-400'
-            }`}
-          >
-            <div className="relative">
-              <MessageCircle className="w-5 h-5" />
-              {chatBadgeCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-                  {chatBadgeCount > 99 ? '99+' : chatBadgeCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px]">チャット</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('delivery')}
-            className={`relative flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'delivery' ? 'text-black' : 'text-gray-400'
-            }`}
-          >
-            <div className="relative">
-              <Truck className="w-5 h-5" />
-              {deliveryBadgeCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-                  {deliveryBadgeCount > 99 ? '99+' : deliveryBadgeCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px]">お届け</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('billing')}
-            className={`relative flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'billing' ? 'text-black' : 'text-gray-400'
-            }`}
-          >
-            <div className="relative">
-              <Receipt className="w-5 h-5" />
-              {billingBadgeCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-                  {billingBadgeCount > 99 ? '99+' : billingBadgeCount}
-                </span>
-              )}
-            </div>
-            <span className="text-[10px]">売上</span>
-          </button>
+          {navItems.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
+                activeTab === item.id ? 'text-black' : 'text-gray-400'
+              }`}
+            >
+              <div className="relative">
+                {item.icon}
+                {item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px]">{item.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>

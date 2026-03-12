@@ -616,8 +616,8 @@ export function ProductManagement({ initialCropId, onInitialCropHandled }: Produ
 
       {/* 登録・編集モーダル（D: 2ステップウィザード） */}
       {isAdding && (
-        <div className="fixed inset-0 bg-black/30 flex items-end z-50 animate-fade-in" onClick={handleCancel}>
-          <div className="bg-white w-full rounded-t-2xl animate-slide-up h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 md:p-8" onClick={handleCancel}>
+          <div className="bg-white w-full max-w-2xl rounded-2xl h-[85vh] md:h-auto md:max-h-[90vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
             {/* ヘッダー + 進捗 */}
             <div className="px-6 pt-5 pb-3 border-b border-gray-100 flex-shrink-0">
               <div className="flex items-center justify-between mb-3">
