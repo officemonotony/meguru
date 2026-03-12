@@ -178,13 +178,14 @@ export interface DataContextType {
   deleteProduct: (id: string) => Promise<void>
   refreshProducts: () => Promise<void>
 
-  addChat: (chat: Chat) => void
-  addMessage: (chatId: string, message: ChatMessage) => void
+  addChat: (chat: Chat) => Promise<string | null>
+  addMessage: (chatId: string, message: ChatMessage) => Promise<void>
+  fetchMessages: (chatId: string) => Promise<void>
   markChatAsRead: (chatId: string, role: 'farmer' | 'restaurant') => void
   getTotalUnread: (role: 'farmer' | 'restaurant') => number
 
-  addDeliverySchedule: (schedule: DeliverySchedule) => void
-  updateDeliverySchedule: (id: string, updates: Partial<DeliverySchedule>) => void
+  addDeliverySchedule: (schedule: DeliverySchedule) => Promise<void>
+  updateDeliverySchedule: (id: string, updates: Partial<DeliverySchedule>) => Promise<void>
 
   addProposal: (proposal: Proposal) => void
   updateProposal: (id: string, status: 'active' | 'accepted' | 'rejected') => void
@@ -192,10 +193,10 @@ export interface DataContextType {
   addSubscription: (sub: ActiveSubscription) => void
 
   getCropRemainingStock: (cropId: string) => number
-  addCrop: (crop: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => void
-  updateCrop: (id: string, updates: Partial<Crop>) => void
-  deleteCrop: (id: string) => void
-  addHarvestLog: (cropId: string, quantity: number, memo?: string) => void
+  addCrop: (crop: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => Promise<void>
+  updateCrop: (id: string, updates: Partial<Crop>) => Promise<void>
+  deleteCrop: (id: string) => Promise<void>
+  addHarvestLog: (cropId: string, quantity: number, memo?: string) => Promise<void>
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -383,12 +384,74 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // ========== 収穫データをSupabaseから取得 ==========
+  const fetchCrops = async () => {
+    if (!user) return
+    try {
+      const { data: cropsData, error: cropsError } = await supabase
+        .from('crops')
+        .select('*, harvest_logs(*)')
+        .eq('farmer_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (cropsError) throw cropsError
+
+      setCrops((cropsData || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        totalStock: c.total_stock,
+        unit: c.unit,
+        imageUrl: c.image_url,
+        memo: c.memo,
+        createdAt: c.created_at,
+        harvestLogs: (c.harvest_logs || []).map((l: any) => ({
+          id: l.id,
+          type: l.type,
+          quantity: l.quantity,
+          memo: l.memo,
+          createdAt: l.created_at,
+        })),
+      })))
+    } catch (e) {
+      console.error('収穫データ取得エラー:', e)
+    }
+  }
+
+  // ========== メッセージをSupabaseから取得 ==========
+  const fetchMessages = async (chatId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_room_id', chatId)
+        .order('created_at', { ascending: true })
+
+      if (error) throw error
+
+      const mapped: ChatMessage[] = (data || []).map((m: any) => ({
+        id: m.id,
+        text: m.text,
+        sender: m.sender_role as 'farmer' | 'restaurant',
+        timestamp: new Date(m.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+        type: m.type,
+        proposalData: m.metadata?.proposalData,
+        proposalStatus: m.metadata?.proposalStatus,
+        counterProposalData: m.metadata?.counterProposalData,
+        subscriptionCounterData: m.metadata?.subscriptionCounterData,
+      }))
+      setMessages(prev => ({ ...prev, [chatId]: mapped }))
+    } catch (e) {
+      console.error('メッセージ取得エラー:', e)
+    }
+  }
+
   useEffect(() => {
     if (user && profile) {
       fetchProducts()
       fetchChats()
       fetchOrders()
       fetchSubscriptions()
+      if (profile.role === 'farmer') fetchCrops()
     } else {
       setProducts([])
       setChats([])
@@ -396,6 +459,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setDeliverySchedules([])
       setProposals([])
       setActiveSubscriptions([])
+      setCrops([])
     }
   }, [user, profile])
 
@@ -440,16 +504,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const refreshProducts = fetchProducts
 
-  // ========== チャット（ローカル状態管理）==========
-  const addChat = (chat: Chat) => {
+  // ========== チャット（Supabase連携）==========
+  const addChat = async (chat: Chat): Promise<string | null> => {
+    if (user && chat.farmerId && chat.restaurantId) {
+      // 既存チャットルームを確認
+      const { data: existing } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('farmer_id', chat.farmerId)
+        .eq('restaurant_id', chat.restaurantId)
+        .single()
+
+      if (existing) {
+        setChats(prev => {
+          const exists = prev.find(c => c.id === existing.id)
+          if (exists) return prev
+          return [...prev, { ...chat, id: existing.id }]
+        })
+        return existing.id
+      }
+
+      const { data, error } = await supabase.from('chat_rooms').insert({
+        farmer_id: chat.farmerId,
+        restaurant_id: chat.restaurantId,
+        last_message: chat.lastMessage,
+        last_message_at: new Date().toISOString(),
+      }).select().single()
+
+      if (error) { console.error('チャット作成エラー:', error); return null }
+
+      const realId = data.id
+      setChats(prev => [...prev, { ...chat, id: realId }])
+      return realId
+    }
+
+    // ローカルのみ（farmerId/restaurantIdがない場合）
     setChats(prev => {
       const exists = prev.find(c => c.id === chat.id)
-      if (exists) return prev.map(c => c.id === chat.id ? { ...c, ...chat } : c)
+      if (exists) return prev
       return [...prev, chat]
     })
+    return chat.id
   }
 
-  const addMessage = (chatId: string, message: ChatMessage) => {
+  const addMessage = async (chatId: string, message: ChatMessage) => {
+    // 楽観的ローカル更新
     setMessages(prev => ({ ...prev, [chatId]: [...(prev[chatId] || []), message] }))
     const receiverRole = message.sender === 'farmer' ? 'restaurant' : 'farmer'
     setUnreadCounts(prev => ({
@@ -460,25 +559,104 @@ export function DataProvider({ children }: { children: ReactNode }) {
         [receiverRole]: (prev[chatId]?.[receiverRole] || 0) + 1,
       }
     }))
+    const lastMsg = message.text || '（メッセージ）'
     setChats(prev => prev.map(c => c.id === chatId ? {
-      ...c, lastMessage: message.text || '（メッセージ）', timestamp: message.timestamp,
+      ...c, lastMessage: lastMsg, timestamp: message.timestamp,
     } : c))
+
+    // Supabase書き込み（chatIdがUUIDの場合のみ有効）
+    if (user) {
+      const validTypes = ['text', 'proposal', 'counterProposal', 'deliveryRequest', 'orderApproval', 'subscriptionCounter']
+      const msgType = validTypes.includes(message.type || '') ? message.type : 'text'
+      const { error } = await supabase.from('messages').insert({
+        chat_room_id: chatId,
+        sender_id: user.id,
+        sender_role: message.sender,
+        text: message.text,
+        type: msgType,
+        metadata: {
+          proposalData: message.proposalData,
+          proposalStatus: message.proposalStatus,
+          counterProposalData: message.counterProposalData,
+          subscriptionCounterData: message.subscriptionCounterData,
+        },
+      })
+      if (error) console.error('メッセージ保存エラー:', error)
+      else {
+        const unreadField = receiverRole === 'farmer' ? 'farmer_unread' : 'restaurant_unread'
+        const newCount = (unreadCounts[chatId]?.[receiverRole] || 0) + 1
+        await supabase.from('chat_rooms').update({
+          last_message: lastMsg,
+          last_message_at: new Date().toISOString(),
+          [unreadField]: newCount,
+        }).eq('id', chatId)
+      }
+    }
   }
 
   const markChatAsRead = (chatId: string, role: 'farmer' | 'restaurant') => {
     setUnreadCounts(prev => ({ ...prev, [chatId]: { ...prev[chatId], [role]: 0 } }))
+    if (user) {
+      const unreadField = role === 'farmer' ? 'farmer_unread' : 'restaurant_unread'
+      supabase.from('chat_rooms').update({ [unreadField]: 0 }).eq('id', chatId)
+        .then(({ error }) => { if (error) console.error('既読更新エラー:', error) })
+    }
   }
 
   const getTotalUnread = (role: 'farmer' | 'restaurant') => {
     return Object.values(unreadCounts).reduce((sum, counts) => sum + (counts[role] || 0), 0)
   }
 
-  // ========== 注文（ローカル）==========
-  const addDeliverySchedule = (schedule: DeliverySchedule) => {
+  // ========== 注文（Supabase連携）==========
+  const addDeliverySchedule = async (schedule: DeliverySchedule) => {
     setDeliverySchedules(prev => [...prev, schedule])
+    if (!user) return
+    try {
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          restaurant_id: schedule.restaurantId || user.id,
+          farmer_id: schedule.farmerId,
+          status: schedule.status,
+          total_amount: schedule.totalAmount || schedule.price || 0,
+          delivery_date: schedule.deliveryDate || null,
+        })
+        .select()
+        .single()
+      if (orderError) { console.error('注文保存エラー:', orderError); return }
+
+      const items = schedule.items?.length
+        ? schedule.items
+        : [{ productName: schedule.productName || '', quantity: schedule.quantity || 0, unit: schedule.unit || '', price: schedule.price || 0 }]
+
+      const { error: itemsError } = await supabase.from('order_items').insert(
+        items.map(item => ({
+          order_id: orderData.id,
+          product_name: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+        }))
+      )
+      if (itemsError) console.error('注文明細保存エラー:', itemsError)
+      else {
+        // ローカルIDをSupabaseのUUIDで更新
+        setDeliverySchedules(prev => prev.map(s => s.id === schedule.id ? { ...s, id: orderData.id } : s))
+      }
+    } catch (e) {
+      console.error('注文保存エラー:', e)
+    }
   }
-  const updateDeliverySchedule = (id: string, updates: Partial<DeliverySchedule>) => {
+
+  const updateDeliverySchedule = async (id: string, updates: Partial<DeliverySchedule>) => {
     setDeliverySchedules(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+    if (!user) return
+    const { error } = await supabase.from('orders').update({
+      status: updates.status,
+      delivery_date: updates.deliveryDate,
+      total_amount: updates.totalAmount,
+    }).eq('id', id)
+    if (error) console.error('注文更新エラー:', error)
   }
 
   // ========== 提案（ローカル）==========
@@ -546,45 +724,107 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return crop.totalStock - allocated
   }
 
-  const addCrop = (cropData: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => {
-    const now = new Date().toISOString()
-    const newCrop: Crop = {
-      ...cropData,
-      id: `crop-${Date.now()}`,
-      harvestLogs: [{
-        id: `log-${Date.now()}`,
+  const addCrop = async (cropData: Omit<Crop, 'id' | 'harvestLogs' | 'createdAt'>) => {
+    if (!user) return
+    const { data: cropRow, error: cropError } = await supabase
+      .from('crops')
+      .insert({
+        farmer_id: user.id,
+        name: cropData.name,
+        total_stock: cropData.totalStock,
+        unit: cropData.unit,
+        image_url: cropData.imageUrl,
+        memo: cropData.memo,
+      })
+      .select()
+      .single()
+    if (cropError) { console.error('収穫データ保存エラー:', cropError); return }
+
+    const { data: logRow, error: logError } = await supabase
+      .from('harvest_logs')
+      .insert({
+        crop_id: cropRow.id,
+        farmer_id: user.id,
         type: 'initial',
         quantity: cropData.totalStock,
         memo: cropData.memo,
-        createdAt: now,
-      }],
-      createdAt: now,
+      })
+      .select()
+      .single()
+    if (logError) console.error('収穫ログ保存エラー:', logError)
+
+    const newCrop: Crop = {
+      ...cropData,
+      id: cropRow.id,
+      harvestLogs: logRow ? [{
+        id: logRow.id,
+        type: 'initial',
+        quantity: cropData.totalStock,
+        memo: cropData.memo,
+        createdAt: logRow.created_at,
+      }] : [],
+      createdAt: cropRow.created_at,
     }
-    setCrops(prev => [...prev, newCrop])
+    setCrops(prev => [newCrop, ...prev])
   }
 
-  const updateCrop = (id: string, updates: Partial<Crop>) => {
+  const updateCrop = async (id: string, updates: Partial<Crop>) => {
     setCrops(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c))
+    if (!user) return
+    const { error } = await supabase.from('crops').update({
+      name: updates.name,
+      total_stock: updates.totalStock,
+      unit: updates.unit,
+      image_url: updates.imageUrl,
+      memo: updates.memo,
+    }).eq('id', id)
+    if (error) console.error('収穫データ更新エラー:', error)
   }
 
-  const deleteCrop = (id: string) => {
+  const deleteCrop = async (id: string) => {
     const linked = products.some(p => p.cropId === id)
     if (linked) throw new Error('この作物に紐づく商品があります')
     setCrops(prev => prev.filter(c => c.id !== id))
+    if (!user) return
+    const { error } = await supabase.from('crops').delete().eq('id', id)
+    if (error) console.error('収穫データ削除エラー:', error)
   }
 
-  const addHarvestLog = (cropId: string, quantity: number, memo?: string) => {
-    const log: HarvestLog = {
+  const addHarvestLog = async (cropId: string, quantity: number, memo?: string) => {
+    const now = new Date().toISOString()
+    // 楽観的ローカル更新
+    const tempLog: HarvestLog = {
       id: `log-${Date.now()}`,
       type: 'additional',
       quantity,
       memo,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     }
     setCrops(prev => prev.map(c => c.id === cropId ? {
       ...c,
       totalStock: c.totalStock + quantity,
-      harvestLogs: [...c.harvestLogs, log],
+      harvestLogs: [...c.harvestLogs, tempLog],
+    } : c))
+
+    if (!user) return
+    const newTotal = (crops.find(c => c.id === cropId)?.totalStock || 0) + quantity
+    const { data: logRow, error: logError } = await supabase
+      .from('harvest_logs')
+      .insert({ crop_id: cropId, farmer_id: user.id, type: 'additional', quantity, memo })
+      .select()
+      .single()
+    if (logError) { console.error('収穫ログ保存エラー:', logError); return }
+
+    const { error: cropError } = await supabase
+      .from('crops')
+      .update({ total_stock: newTotal })
+      .eq('id', cropId)
+    if (cropError) { console.error('収穫量更新エラー:', cropError); return }
+
+    // tempIDをSupabase UUIDで置き換え
+    setCrops(prev => prev.map(c => c.id === cropId ? {
+      ...c,
+      harvestLogs: c.harvestLogs.map(l => l.id === tempLog.id ? { ...l, id: logRow.id, createdAt: logRow.created_at } : l),
     } : c))
   }
 
@@ -592,7 +832,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     <DataContext.Provider value={{
       products, chats, messages, deliverySchedules, proposals, activeSubscriptions, unreadCounts, crops, loading,
       addProduct, updateProduct, deleteProduct, refreshProducts,
-      addChat, addMessage, markChatAsRead, getTotalUnread,
+      addChat, addMessage, fetchMessages, markChatAsRead, getTotalUnread,
       addDeliverySchedule, updateDeliverySchedule,
       addProposal, updateProposal,
       addActiveSubscription,

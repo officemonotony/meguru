@@ -6,8 +6,8 @@ import { OrderTab } from '@/app/components/OrderTab';
 import { HistoryTab } from '@/app/components/HistoryTab';
 import { MonthlyInvoice } from '@/app/components/MonthlyInvoice';
 import { SubscriptionProposal } from '@/app/components/ProposalForm';
-import { useData, RESTAURANT_INFO } from '@/app/context/DataContext';
-const ryuNoKasaAvatar = 'https://images.unsplash.com/photo-1560493676-04071c5f467b?w=200';
+import { useData } from '@/app/context/DataContext';
+import { useAuth } from '@/app/context/AuthContext';
 
 interface RestaurantDashboardProps {
   onLogout: () => void;
@@ -16,44 +16,29 @@ interface RestaurantDashboardProps {
 type Tab = 'chat' | 'order' | 'history' | 'payment';
 
 export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
-  const { addChat, addProposal, addMessage, addDeliverySchedule, markChatAsRead, getTotalUnread } = useData();
+  const { user, profile } = useAuth();
+  const { addChat, addProposal, addMessage, addDeliverySchedule, markChatAsRead, getTotalUnread, chats } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('order');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [selectedChatName, setSelectedChatName] = useState<string>('');
   const [selectedChatAvatar, setSelectedChatAvatar] = useState<string>('');
   const [orderConfirmation, setOrderConfirmation] = useState<{
-    farmerId: string;
+    chatId: string;
     farmerName: string;
     items: { product: { name: string; unit: string; price: number }; quantity: number }[];
     deliveryDate: string;
     totalAmount: number;
   } | null>(null);
 
-  const farmerChatMapping: { [farmerId: string]: { chatId: string; name: string; avatar: string } } = {
-    'farmer1': {
-      chatId: 'chat-farmer1',
-      name: '\u9F8D\u30CE\u5098',
-      avatar: ryuNoKasaAvatar
-    },
-    'farmer2': {
-      chatId: 'chat-farmer2',
-      name: '\u4F50\u85E4\u8FB2\u5712',
-      avatar: 'https://images.unsplash.com/photo-1560493676-04071c5f467b?w=200'
-    },
-    'farmer3': {
-      chatId: 'chat-farmer3',
-      name: '\u9234\u6728\u8FB2\u5712',
-      avatar: 'https://images.unsplash.com/photo-1574943320219-553eb213f72d?w=200'
-    },
-  };
+  const myId = user?.id || '';
+  const myName = profile?.shop_name || '';
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
     markChatAsRead(chatId, 'restaurant');
-    
-    const farmerInfo = Object.values(farmerChatMapping).find(f => f.chatId === chatId);
-    setSelectedChatName(farmerInfo?.name || '');
-    setSelectedChatAvatar(farmerInfo?.avatar || '');
+    const chat = chats.find(c => c.id === chatId);
+    setSelectedChatName(chat?.name || '');
+    setSelectedChatAvatar(chat?.avatarUrl || '');
     setActiveTab('chat');
   };
 
@@ -63,40 +48,35 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
     setSelectedChatAvatar('');
   };
 
-  const handleProposalSubmit = (proposal: Omit<SubscriptionProposal, 'id' | 'status' | 'createdAt'>) => {
-    const farmerInfo = farmerChatMapping[proposal.farmerId];
-    if (!farmerInfo) return;
-    
-    const chatId = farmerInfo.chatId;
-    
-    addChat({
-      id: chatId,
-      name: farmerInfo.name,
-      lastMessage: '\u7D99\u7D9A\u306E\u63D0\u6848',
-      timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+  const handleProposalSubmit = async (proposal: Omit<SubscriptionProposal, 'id' | 'status' | 'createdAt'>) => {
+    const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    const chatId = await addChat({
+      id: '',
+      name: proposal.farmerName,
+      lastMessage: '継続の提案',
+      timestamp: now,
       unread: 0,
-      avatarUrl: farmerInfo.avatar,
       farmerId: proposal.farmerId,
-      restaurantId: RESTAURANT_INFO.id,
+      restaurantId: myId,
     });
-    
+    if (!chatId) return;
+
     const proposalId = `proposal-${Date.now()}`;
-    
     addProposal({
       ...proposal,
       id: proposalId,
-      restaurantId: RESTAURANT_INFO.id,
-      restaurantName: RESTAURANT_INFO.name,
+      restaurantId: myId,
+      restaurantName: myName,
       status: 'pending',
       createdAt: new Date().toISOString(),
     });
-    
-    const frequencyLabel = { twice_weekly: '\u9031\uFF12\u56DE', weekly: '\u9031\uFF11\u56DE', biweekly: '\u9694\u9031', monthly: '\u6708\uFF11\u56DE' }[proposal.frequency] || proposal.frequency;
+
+    const frequencyLabel = { twice_weekly: '週２回', weekly: '週１回', biweekly: '隔週', monthly: '月１回' }[proposal.frequency] || proposal.frequency;
     addMessage(chatId, {
       id: proposalId,
       text: '',
       sender: 'restaurant',
-      timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now,
       type: 'proposal',
       proposalData: {
         productName: proposal.productName,
@@ -119,66 +99,44 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
     setActiveTab('chat');
   };
 
-  const handleDeliveryRequest = (request: any) => {
-    console.log('\u914D\u9001\u4F9D\u983C\u3092\u9001\u4FE1:', request);
-    
-    const farmerId = request.farmerId || 'farmer1';
-    const farmerInfo = farmerChatMapping[farmerId];
-    
-    console.log('\u8FB2\u5BB6\u60C5\u5831:', farmerId, farmerInfo);
-    
-    if (!farmerInfo) {
-      console.error('\u8FB2\u5BB6\u60C5\u5831\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093:', farmerId);
-      return;
-    }
-    
-    const chatId = farmerInfo.chatId;
-    
-    console.log('\u30C1\u30E3\u30C3\u30C8ID:', chatId);
-    
-    addChat({
-      id: chatId,
-      name: farmerInfo.name,
-      lastMessage: '\u914D\u9001\u4F9D\u983C',
-      timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+  const handleDeliveryRequest = async (request: any) => {
+    const farmerId: string = request.farmerId;
+    const farmerName: string = request.farmerName;
+    if (!farmerId) return;
+
+    const now = new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    const chatId = await addChat({
+      id: '',
+      name: farmerName,
+      lastMessage: '配送依頼',
+      timestamp: now,
       unread: 0,
-      avatarUrl: farmerInfo.avatar,
-      farmerId: farmerId,
-      restaurantId: RESTAURANT_INFO.id,
+      farmerId,
+      restaurantId: myId,
     });
-    
+    if (!chatId) return;
+
     const itemsText = request.items
-      .map((item: any) => `\u30FB${item.product.name} ${item.quantity}${item.product.unit}`)
+      .map((item: any) => `・${item.product.name} ${item.quantity}${item.product.unit}`)
       .join('\n');
-    
-    const messageText = `\u3010\u914D\u9001\u4F9D\u983C\u3011\n\n${itemsText}\n\n\u914D\u9001\u5E0C\u671B\u65E5: ${request.deliveryDate}\n\u5408\u8A08\u91D1\u984D: \xA5${request.totalAmount.toLocaleString()}\n\n\u3088\u308D\u3057\u304F\u304A\u9858\u3044\u3044\u305F\u3057\u307E\u3059\u3002`;
-    
-    console.log('\u30E1\u30C3\u30BB\u30FC\u30B8:', messageText);
-    
-    const messageId = `delivery-request-${Date.now()}`;
-    
+    const messageText = `【配送依頼】\n\n${itemsText}\n\n配送希望日: ${request.deliveryDate}\n合計金額: ¥${request.totalAmount.toLocaleString()}\n\nよろしくお願いいたします。`;
+
     addMessage(chatId, {
-      id: messageId,
+      id: `delivery-request-${Date.now()}`,
       text: messageText,
       sender: 'restaurant',
-      timestamp: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: now,
       type: 'text',
     });
-    
-    console.log('\u30E1\u30C3\u30BB\u30FC\u30B8\u3092\u8FFD\u52A0\u3057\u307E\u3057\u305F');
-    
-    const productNameCombined = request.items
-      .map((item: any) => item.product.name)
-      .join('\u3001');
-    const quantityDesc = request.items
-      .map((item: any) => `${item.quantity}${item.product.unit}`)
-      .join(' / ');
+
+    const productNameCombined = request.items.map((item: any) => item.product.name).join('、');
+    const quantityDesc = request.items.map((item: any) => `${item.quantity}${item.product.unit}`).join(' / ');
 
     addDeliverySchedule({
-      id: `onetime-${messageId}`,
+      id: `onetime-${Date.now()}`,
       subscriptionId: '',
-      restaurantName: RESTAURANT_INFO.name,
-      restaurantId: RESTAURANT_INFO.id,
+      restaurantName: myName,
+      restaurantId: myId,
       productName: productNameCombined,
       quantity: request.items.reduce((sum: number, item: any) => sum + item.quantity, 0),
       unit: quantityDesc,
@@ -186,17 +144,21 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
       deliveryDate: request.deliveryDate,
       status: 'ordered' as const,
       orderDate: new Date().toISOString().split('T')[0],
-      farmerName: farmerInfo.name,
-      farmerId: farmerId,
-            items: [],
-        totalAmount: 0,
-        createdAt: new Date().toISOString(),
-      });
-    
-    // チャットに自動遷移せず、注文完了サマリーを表示
-    setOrderConfirmation({
+      farmerName,
       farmerId,
-      farmerName: farmerInfo.name,
+      items: request.items.map((item: any) => ({
+        productName: item.product.name,
+        quantity: item.quantity,
+        unit: item.product.unit,
+        price: item.product.price * item.quantity,
+      })),
+      totalAmount: request.totalAmount,
+      createdAt: new Date().toISOString(),
+    });
+
+    setOrderConfirmation({
+      chatId,
+      farmerName,
       items: request.items,
       deliveryDate: request.deliveryDate,
       totalAmount: request.totalAmount,
@@ -205,11 +167,8 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
 
   const handleOpenChatFromConfirmation = () => {
     if (!orderConfirmation) return;
-    const farmerInfo = farmerChatMapping[orderConfirmation.farmerId];
-    if (farmerInfo) {
-      setOrderConfirmation(null);
-      handleSelectChat(farmerInfo.chatId);
-    }
+    setOrderConfirmation(null);
+    handleSelectChat(orderConfirmation.chatId);
   };
 
   const chatBadgeCount = getTotalUnread('restaurant');

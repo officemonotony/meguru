@@ -139,7 +139,7 @@ function getCounterProposalStatus(
 // メインコンポーネント
 // =====================================
 export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'restaurant' }: ChatRoomProps) {
-  const { proposals, updateProposal, addActiveSubscription, messages: contextMessages, addMessage, deliverySchedules, addDeliverySchedule, updateDeliverySchedule, products, chats } = useData();
+  const { proposals, updateProposal, addActiveSubscription, messages: contextMessages, addMessage, fetchMessages, deliverySchedules, addDeliverySchedule, updateDeliverySchedule, products, chats } = useData();
   const [inputText, setInputText] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -181,6 +181,11 @@ export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'rest
   } | null>(null);
 
   const messages = contextMessages[chatId] || [];
+
+  // チャット開いた時にSupabaseからメッセージを取得
+  useEffect(() => {
+    fetchMessages(chatId);
+  }, [chatId]);
 
   // 提案のステータスをDataContext.proposalsから取得するヘルパー
   const getProposalStatus = (proposalId: string): 'pending' | 'accepted' | 'rejected' | 'active' => {

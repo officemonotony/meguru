@@ -89,8 +89,31 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_id UUID REFERENCES profiles(id),
   sender_role TEXT NOT NULL CHECK (sender_role IN ('farmer', 'restaurant')),
   text TEXT,
-  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'proposal', 'counterProposal', 'deliveryRequest', 'orderApproval')),
+  type TEXT DEFAULT 'text' CHECK (type IN ('text', 'proposal', 'counterProposal', 'deliveryRequest', 'orderApproval', 'subscriptionCounter')),
   metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 8. 収穫管理テーブル
+CREATE TABLE IF NOT EXISTS crops (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  farmer_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  total_stock INTEGER NOT NULL DEFAULT 0,
+  unit TEXT NOT NULL,
+  image_url TEXT,
+  memo TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. 収穫ログテーブル
+CREATE TABLE IF NOT EXISTS harvest_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  crop_id UUID REFERENCES crops(id) ON DELETE CASCADE,
+  farmer_id UUID REFERENCES profiles(id),
+  type TEXT NOT NULL CHECK (type IN ('initial', 'additional')),
+  quantity INTEGER NOT NULL,
+  memo TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -105,6 +128,8 @@ ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE harvest_logs ENABLE ROW LEVEL SECURITY;
 
 -- プロフィール: 自分のみ更新可、全員読み取り可
 CREATE POLICY "profiles_read" ON profiles FOR SELECT USING (true);
@@ -158,6 +183,17 @@ CREATE POLICY "messages_read" ON messages FOR SELECT USING (
   EXISTS (SELECT 1 FROM chat_rooms WHERE id = chat_room_id AND (farmer_id = auth.uid() OR restaurant_id = auth.uid()))
 );
 CREATE POLICY "messages_insert" ON messages FOR INSERT WITH CHECK (auth.uid() = sender_id);
+
+-- 収穫: 自分の作物のみ
+CREATE POLICY "crops_read" ON crops FOR SELECT USING (auth.uid() = farmer_id);
+CREATE POLICY "crops_insert" ON crops FOR INSERT WITH CHECK (auth.uid() = farmer_id);
+CREATE POLICY "crops_update" ON crops FOR UPDATE USING (auth.uid() = farmer_id);
+CREATE POLICY "crops_delete" ON crops FOR DELETE USING (auth.uid() = farmer_id);
+
+-- 収穫ログ: 自分の作物のログのみ
+CREATE POLICY "harvest_logs_read" ON harvest_logs FOR SELECT USING (auth.uid() = farmer_id);
+CREATE POLICY "harvest_logs_insert" ON harvest_logs FOR INSERT WITH CHECK (auth.uid() = farmer_id);
+CREATE POLICY "harvest_logs_delete" ON harvest_logs FOR DELETE USING (auth.uid() = farmer_id);
 
 -- ============================================================
 -- トリガー: 新規ユーザー登録時にprofileを自動作成
