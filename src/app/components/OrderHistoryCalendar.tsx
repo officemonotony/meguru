@@ -3,7 +3,8 @@ import { ChevronLeft, ChevronRight, CheckCircle, Clock, Package, FileText, Truck
 import { DocumentViewer, DocumentData } from '@/app/components/DocumentViewer';
 import { Button } from '@/app/components/ui/button';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { useData, RESTAURANT_INFO } from '@/app/context/DataContext';
+import { useData } from '@/app/context/DataContext';
+import { useAuth } from '@/app/context/AuthContext';
 import { toast } from 'sonner';
 
 interface Order {
@@ -38,6 +39,7 @@ const issueCategories = [
 ];
 
 export function OrderHistoryCalendar() {
+  const { profile } = useAuth();
   const { deliverySchedules, updateDeliverySchedule, chats, addMessage, products } = useData();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -153,7 +155,7 @@ export function OrderHistoryCalendar() {
         phone: '000-0000-0000',
       },
       restaurantInfo: {
-        name: RESTAURANT_INFO.name,
+        name: profile?.shop_name || order.farmerName || '',
         address: '〒000-0000 県 市 町 4-5-6',
         phone: '000-0000-0000',
       },

@@ -6,7 +6,7 @@ import { Textarea } from '@/app/components/ui/textarea';
 import { ImageGallery } from '@/app/components/ImageGallery';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { useData, Product } from '@/app/context/DataContext';
-import { REGISTERED_RESTAURANTS } from '@/app/context/DataContext';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { toHalfWidth } from '@/app/utils/normalizeNumber';
 
@@ -50,6 +50,19 @@ export function ProductManagement({ initialCropId, onInitialCropHandled }: Produ
   const [justPublishedId, setJustPublishedId] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'public' | 'private' | 'unpublished'>('public');
   const [unpublishTarget, setUnpublishTarget] = useState<Product | null>(null);
+  const [restaurantProfiles, setRestaurantProfiles] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    supabase
+      .from('profiles')
+      .select('id, shop_name')
+      .eq('role', 'restaurant')
+      .then(({ data }) => {
+        if (data) {
+          setRestaurantProfiles(data.map(r => ({ id: r.id, name: r.shop_name || '' })));
+        }
+      });
+  }, []);
 
   // D: 2ステップウィザード
   const [formStep, setFormStep] = useState<1 | 2>(1);
@@ -593,7 +606,7 @@ export function ProductManagement({ initialCropId, onInitialCropHandled }: Produ
                       )}
                       {product.visibility === 'private' && product.visibleTo && product.visibleTo.length > 0 && (
                         <span className="text-[11px] text-gray-400 truncate">
-                          {REGISTERED_RESTAURANTS.filter(r => product.visibleTo!.includes(r.id)).map(r => r.name).join('・')}
+                          {restaurantProfiles.filter(r => product.visibleTo!.includes(r.id)).map(r => r.name).join('・')}
                         </span>
                       )}
                       {product.cropId && (() => {
@@ -1111,7 +1124,7 @@ export function ProductManagement({ initialCropId, onInitialCropHandled }: Produ
                       <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
                         <p className="text-xs text-gray-500 mb-2">この商品を閲覧できる飲食店を選択</p>
                         <div className="space-y-2">
-                          {REGISTERED_RESTAURANTS.map(restaurant => {
+                          {restaurantProfiles.map(restaurant => {
                             const isChecked = formData.visibleTo.includes(restaurant.id);
                             return (
                               <label
@@ -1312,7 +1325,7 @@ export function ProductManagement({ initialCropId, onInitialCropHandled }: Produ
       {showConfirmPublish && pendingProduct && (() => {
         const isPrivate = pendingProduct.visibility === 'private';
         const targetNames = isPrivate
-          ? REGISTERED_RESTAURANTS.filter(r => pendingProduct.visibleTo?.includes(r.id)).map(r => r.name)
+          ? restaurantProfiles.filter(r => pendingProduct.visibleTo?.includes(r.id)).map(r => r.name)
           : [];
         return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

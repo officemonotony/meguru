@@ -11,7 +11,16 @@ interface Profile {
   shop_name: string
   representative_name: string | null
   address: string | null
+  avatar_url: string | null
+  delivery_address: string | null
+  delivery_memo: string | null
+  line_user_id: string | null
 }
+
+type ProfileUpdates = Partial<Pick<Profile,
+  'shop_name' | 'representative_name' | 'address' |
+  'avatar_url' | 'delivery_address' | 'delivery_memo' | 'line_user_id'
+>>
 
 interface AuthContextType {
   user: User | null
@@ -21,6 +30,7 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
+  updateProfile: (updates: ProfileUpdates) => Promise<{ error: Error | null }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -73,11 +83,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }
 
+  async function updateProfile(updates: ProfileUpdates): Promise<{ error: Error | null }> {
+    if (!user) return { error: new Error('Not authenticated') }
+    const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
+    if (!error) setProfile(prev => prev ? { ...prev, ...updates } : prev)
+    return { error: error as Error | null }
+  }
+
   return (
     <AuthContext.Provider value={{
       user, session, profile,
       role: profile?.role ?? null,
-      loading, signIn, signOut
+      loading, signIn, signOut, updateProfile,
     }}>
       {children}
     </AuthContext.Provider>

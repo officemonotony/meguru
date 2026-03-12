@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { LogOut, ShoppingBag, MessageCircle, Truck, Receipt, CheckCircle, MessageSquare } from 'lucide-react';
+import { LogOut, ShoppingBag, MessageCircle, Truck, Receipt, CheckCircle, MessageSquare, UserCircle } from 'lucide-react';
+import { ProfileModal } from '@/app/components/ProfileModal';
 import { ChatList } from '@/app/components/ChatList';
 import { ChatRoom } from '@/app/components/ChatRoom';
 import { OrderTab } from '@/app/components/OrderTab';
@@ -32,6 +33,7 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
 
   const myId = user?.id || '';
   const myName = profile?.shop_name || '';
+  const [showProfile, setShowProfile] = useState(false);
 
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
@@ -178,12 +180,16 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
       {/* Header */}
       <div className="fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
         <h1 className="text-lg font-bold text-black">メグル</h1>
-        <button
-          onClick={onLogout}
-          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-        >
-          <LogOut className="w-5 h-5 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowProfile(true)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+              : <UserCircle className="w-5 h-5 text-gray-600" />}
+          </button>
+          <button onClick={onLogout} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <LogOut className="w-5 h-5 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
@@ -255,6 +261,8 @@ export function RestaurantDashboard({ onLogout }: RestaurantDashboardProps) {
           </button>
         </div>
       </div>
+
+      <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />
 
       {/* 注文完了サマリーモーダル */}
       {orderConfirmation && (

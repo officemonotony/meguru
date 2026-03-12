@@ -155,13 +155,6 @@ export interface Crop {
   createdAt: string
 }
 
-export const RESTAURANT_INFO = {
-  id: '',
-  name: '',
-  avatarUrl: '',
-}
-
-export const REGISTERED_RESTAURANTS: { id: string; name: string }[] = []
 
 export interface DataContextType {
   products: Product[]

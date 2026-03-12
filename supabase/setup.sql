@@ -196,9 +196,12 @@ CREATE POLICY "harvest_logs_insert" ON harvest_logs FOR INSERT WITH CHECK (auth.
 CREATE POLICY "harvest_logs_delete" ON harvest_logs FOR DELETE USING (auth.uid() = farmer_id);
 
 -- ============================================================
--- LINE通知: profilesにline_user_idカラムを追加
+-- プロフィール拡張: カラム追加
 -- ============================================================
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS line_user_id TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS delivery_address TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS delivery_memo TEXT;
 
 -- 自分のline_user_idのみ更新可
 CREATE POLICY "profiles_update_line_user_id" ON profiles

@@ -1,5 +1,4 @@
 import { useData, DeliverySchedule } from '@/app/context/DataContext';
-import { RESTAURANT_INFO } from '@/app/context/DataContext';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { toast } from 'sonner';
 import { useState } from 'react';
@@ -52,7 +51,11 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
   const getPendingRequestSchedules = (): DeliverySchedule[] => {
     const pending: DeliverySchedule[] = [];
 
-    Object.entries(messages).forEach(([_chatId, chatMessages]) => {
+    Object.entries(messages).forEach(([chatId, chatMessages]) => {
+      const chat = chats.find(c => c.id === chatId);
+      const restaurantId = chat?.restaurantId || '';
+      const restaurantName = chat?.name || '';
+
       chatMessages.forEach(message => {
         if (message.text?.includes('【配送依頼】') && message.sender === 'restaurant') {
           // 既に承認済み（deliverySchedulesに登録済み）ならスキップ
@@ -106,8 +109,8 @@ export function FarmerOrdersCalendar({ onOpenChat, initialTab }: FarmerOrdersCal
             pending.push({
               id: `pending-${message.id}`,
               subscriptionId: '',
-              restaurantName: RESTAURANT_INFO.name,
-              restaurantId: RESTAURANT_INFO.id,
+              restaurantName,
+              restaurantId,
               productName: productNameCombined,
               quantity: items.reduce((sum, item) => sum + item.quantity, 0),
               unit: items.map(item => `${item.quantity}${item.unit}`).join(' / '),

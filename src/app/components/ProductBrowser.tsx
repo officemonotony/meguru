@@ -4,7 +4,7 @@ import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { ProposalForm, SubscriptionProposal } from '@/app/components/ProposalForm';
 import { OneTimeOrderForm } from '@/app/components/OneTimeOrderForm';
 import { useData, Product } from '@/app/context/DataContext';
-import { RESTAURANT_INFO } from '@/app/context/DataContext';
+import { useAuth } from '@/app/context/AuthContext';
 
 interface ProductBrowserProps {
   onProposalSubmit: (proposal: Omit<SubscriptionProposal, 'id' | 'status' | 'createdAt'>) => void;
@@ -13,13 +13,14 @@ interface ProductBrowserProps {
 
 export function ProductBrowser({ onProposalSubmit, onDeliveryRequest }: ProductBrowserProps) {
   const { products, getCropRemainingStock } = useData();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showProposalForm, setShowProposalForm] = useState(false);
   const [showOneTimeOrderForm, setShowOneTimeOrderForm] = useState(false);
 
-  const currentRestaurantId = RESTAURANT_INFO.id;
+  const currentRestaurantId = user?.id || '';
 
   const filteredProducts = products.filter((product) => {
     // 非公開商品は除外

@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { LogOut, Package, MessageCircle, Calendar, Receipt, Truck, Sprout } from 'lucide-react';
+import { LogOut, Package, MessageCircle, Calendar, Receipt, Truck, Sprout, UserCircle } from 'lucide-react';
 import { ChatList } from '@/app/components/ChatList';
 import { ChatRoom } from '@/app/components/ChatRoom';
 import { FarmerSubscriptionTab } from '@/app/components/FarmerSubscriptionTab';
 import { FarmerProductTab } from '@/app/components/FarmerProductTab';
 import { MonthlyInvoice } from '@/app/components/MonthlyInvoice';
 import { FarmerOrders } from '@/app/components/FarmerOrders';
-import { RESTAURANT_INFO, useData } from '@/app/context/DataContext';
+import { ProfileModal } from '@/app/components/ProfileModal';
+import { useData } from '@/app/context/DataContext';
+import { useAuth } from '@/app/context/AuthContext';
 
 interface FarmerDashboardProps {
   onLogout: () => void;
@@ -15,13 +17,15 @@ interface FarmerDashboardProps {
 type Tab = 'products' | 'orders' | 'delivery' | 'chat' | 'billing';
 
 export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
-  const { messages, proposals, markChatAsRead, getTotalUnread, deliverySchedules } = useData();
+  const { profile } = useAuth();
+  const { messages, proposals, markChatAsRead, getTotalUnread, deliverySchedules, chats } = useData();
   const [activeTab, setActiveTab] = useState<Tab>('products');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [selectedChatName, setSelectedChatName] = useState<string>('');
   const [selectedChatAvatar, setSelectedChatAvatar] = useState<string>('');
   const [ordersInitialTab, setOrdersInitialTab] = useState<'ordered' | 'approved' | 'delivered' | 'paid' | undefined>(undefined);
   const [deliveryInitialTab, setDeliveryInitialTab] = useState<'ordered' | 'approved' | 'delivered' | 'paid' | undefined>(undefined);
+  const [showProfile, setShowProfile] = useState(false);
 
   const orderBadgeCount = (() => {
     let oneTimeCount = 0;
@@ -47,15 +51,9 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
   const handleSelectChat = (chatId: string) => {
     setSelectedChatId(chatId);
     markChatAsRead(chatId, 'farmer');
-    const chatData: { [key: string]: { name: string; avatar: string } } = {
-      '1': { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl },
-      'chat-farmer1': { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl },
-      '2': { name: '和食処さくら', avatar: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200' },
-      '3': { name: 'カフェ緑', avatar: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=200' },
-    };
-    const data = chatData[chatId] || { name: RESTAURANT_INFO.name, avatar: RESTAURANT_INFO.avatarUrl };
-    setSelectedChatName(data.name);
-    setSelectedChatAvatar(data.avatar);
+    const chat = chats.find(c => c.id === chatId);
+    setSelectedChatName(chat?.name || '');
+    setSelectedChatAvatar(chat?.avatarUrl || '');
   };
 
   const handleBackToList = () => {
@@ -65,29 +63,12 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
   };
 
   const handleOpenChatFromProposal = (restaurantId: string, restaurantName: string) => {
-    const chatIdMap: { [key: string]: string } = {
-      'REST001': 'chat-farmer1',
-      'REST002': '2',
-      'REST003': '3',
-      'restaurant1': 'chat-farmer1',
-      'restaurant2': '2',
-      'restaurant3': '3',
-    };
-    const chatId = chatIdMap[restaurantId] || 'chat-farmer1';
-    let avatar = RESTAURANT_INFO.avatarUrl;
-    if (restaurantId !== 'REST001' && restaurantId !== 'restaurant1') {
-      const avatarMap: { [key: string]: string } = {
-        'REST002': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200',
-        'REST003': 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=200',
-        'restaurant2': 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200',
-        'restaurant3': 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?w=200',
-      };
-      avatar = avatarMap[restaurantId] || RESTAURANT_INFO.avatarUrl;
-    }
-    setSelectedChatId(chatId);
+    const chat = chats.find(c => c.restaurantId === restaurantId);
+    if (!chat) return;
+    setSelectedChatId(chat.id);
     setSelectedChatName(restaurantName);
-    setSelectedChatAvatar(avatar);
-    markChatAsRead(chatId, 'farmer');
+    setSelectedChatAvatar(chat.avatarUrl || '');
+    markChatAsRead(chat.id, 'farmer');
     setActiveTab('chat');
   };
 
@@ -142,8 +123,19 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3 border-t border-gray-200">
+        {/* Profile & Logout */}
+        <div className="p-3 border-t border-gray-200 space-y-1">
+          <button
+            onClick={() => setShowProfile(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+          >
+            <div className="w-5 h-5 rounded-full overflow-hidden flex items-center justify-center shrink-0">
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                : <UserCircle className="w-5 h-5" />}
+            </div>
+            <span className="truncate">{profile?.shop_name || 'プロフィール'}</span>
+          </button>
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
@@ -159,9 +151,16 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
         {/* Mobile Header */}
         <div className="md:hidden fixed top-0 left-0 right-0 z-30 bg-white border-b border-gray-200 px-4 h-14 flex items-center justify-between">
           <h1 className="text-lg font-bold text-black">メグル</h1>
-          <button onClick={onLogout} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <LogOut className="w-5 h-5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={() => setShowProfile(true)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              {profile?.avatar_url
+                ? <img src={profile.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
+                : <UserCircle className="w-5 h-5 text-gray-600" />}
+            </button>
+            <button onClick={onLogout} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+              <LogOut className="w-5 h-5 text-gray-600" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -194,6 +193,8 @@ export function FarmerDashboard({ onLogout }: FarmerDashboardProps) {
           )}
         </div>
       </div>
+
+      <ProfileModal open={showProfile} onClose={() => setShowProfile(false)} />
 
       {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30">

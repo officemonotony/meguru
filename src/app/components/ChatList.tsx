@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { MessageCircle, Search } from 'lucide-react';
 import { Input } from '@/app/components/ui/input';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
-import { useData, RESTAURANT_INFO } from '@/app/context/DataContext';
+import { useData } from '@/app/context/DataContext';
 
 export interface ChatRoom {
   id: string;
@@ -100,16 +100,9 @@ export function ChatList({ userType, onSelectChat }: ChatListProps) {
 
       <div className="space-y-0">
         {filteredChats.map((chat) => {
-          // userTypeに応じて表示する名前とアバターを決定
-          let displayName = chat.name;
-          let displayAvatar = chat.avatarUrl;
-          
-          // 農家の場合、飲食店の情報を表示
-          if (userType === 'farmer' && chat.restaurantId) {
-            displayName = RESTAURANT_INFO.name;
-            displayAvatar = RESTAURANT_INFO.avatarUrl;
-          }
-          
+          const displayName = chat.name;
+          const displayAvatar = chat.avatarUrl;
+
           return (
             <button
               key={chat.id}

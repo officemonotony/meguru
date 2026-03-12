@@ -4,7 +4,8 @@ import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { ImageWithFallback } from '@/app/components/figma/ImageWithFallback';
 import { DatePicker } from '@/app/components/DatePicker';
-import { useData, RESTAURANT_INFO } from '@/app/context/DataContext';
+import { useData } from '@/app/context/DataContext';
+import { useAuth } from '@/app/context/AuthContext';
 import type { DeliverySchedule } from '@/app/context/DataContext';
 import type { ProposalData, CounterProposalData, SubscriptionCounterData } from '@/app/types';
 import type { ChatMessage as Message } from '@/app/context/DataContext';
@@ -139,7 +140,9 @@ function getCounterProposalStatus(
 // メインコンポーネント
 // =====================================
 export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'restaurant' }: ChatRoomProps) {
+  const { user, profile } = useAuth();
   const { proposals, updateProposal, addActiveSubscription, messages: contextMessages, addMessage, fetchMessages, deliverySchedules, addDeliverySchedule, updateDeliverySchedule, products, chats } = useData();
+  const currentChat = chats.find(c => c.id === chatId);
   const [inputText, setInputText] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -232,12 +235,11 @@ export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'rest
     });
 
     // DeliveryScheduleを即座に作成（ステータスバッジの正確な判定のため）
-    const currentChat = chats.find(c => c.id === chatId);
     addDeliverySchedule({
       id: `onetime-${messageId}`,
       subscriptionId: '',
-      restaurantName: RESTAURANT_INFO.name,
-      restaurantId: RESTAURANT_INFO.id,
+      restaurantName: profile?.shop_name || '',
+      restaurantId: user?.id || currentChat?.restaurantId || '',
       productName: selectedProduct.name,
       quantity: parseInt(orderQuantity),
       unit: selectedProduct.unit,
@@ -398,7 +400,7 @@ export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'rest
         id: scheduleId,
         subscriptionId: '',
         restaurantName: chatName,
-        restaurantId: currentChat?.restaurantId || RESTAURANT_INFO.id,
+        restaurantId: currentChat?.restaurantId || '',
         productName,
         quantity: parsed.items.reduce((s, i) => s + i.quantity, 0),
         unit: parsed.items.map(i => `${i.quantity}${i.unit}`).join(' / '),
@@ -496,8 +498,8 @@ export function ChatRoom({ chatId, chatName, avatarUrl, onBack, userType = 'rest
       addDeliverySchedule({
         id: scheduleId,
         subscriptionId: '',
-        restaurantName: RESTAURANT_INFO.name,
-        restaurantId: RESTAURANT_INFO.id,
+        restaurantName: currentChat?.name || chatName,
+        restaurantId: currentChat?.restaurantId || '',
         productName,
         quantity: counterData.items.reduce((s, i) => s + i.proposedQuantity, 0),
         unit: counterData.items.map(i => `${i.proposedQuantity}${i.unit}`).join(' / '),

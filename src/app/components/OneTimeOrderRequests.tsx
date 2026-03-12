@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Calendar, Package, User, MessageCircle, Clock, CheckCircle, Repeat, XCircle, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
-import { useData, RESTAURANT_INFO } from '@/app/context/DataContext';
+import { useData } from '@/app/context/DataContext';
 
 interface OneTimeOrderRequestsProps {
   onOpenChat?: (restaurantId: string, restaurantName: string) => void;
@@ -25,7 +25,7 @@ interface OrderRequest {
 }
 
 export function OneTimeOrderRequests({ onOpenChat, onNavigateToOrders }: OneTimeOrderRequestsProps) {
-  const { messages, deliverySchedules, updateDeliverySchedule, addDeliverySchedule, addMessage } = useData();
+  const { messages, deliverySchedules, updateDeliverySchedule, addDeliverySchedule, addMessage, chats } = useData();
   const [filter, setFilter] = useState<'all' | 'pending' | 'confirmed' | 'counterProposed' | 'declined'>('pending');
   const [approveTarget, setApproveTarget] = useState<OrderRequest | null>(null);
 
@@ -34,6 +34,10 @@ export function OneTimeOrderRequests({ onOpenChat, onNavigateToOrders }: OneTime
     const requests: OrderRequest[] = [];
     
     Object.entries(messages).forEach(([chatId, chatMessages]) => {
+      const chat = chats.find(c => c.id === chatId);
+      const restaurantId = chat?.restaurantId || '';
+      const restaurantName = chat?.name || '';
+
       chatMessages.forEach(message => {
         if (message.text?.includes('【配送依頼】') && message.sender === 'restaurant') {
           // メッセージから情報を抽出
@@ -82,8 +86,8 @@ export function OneTimeOrderRequests({ onOpenChat, onNavigateToOrders }: OneTime
             requests.push({
               id: message.id,
               chatId,
-              restaurantId: RESTAURANT_INFO.id,
-              restaurantName: RESTAURANT_INFO.name,
+              restaurantId,
+              restaurantName,
               items,
               deliveryDate,
               totalAmount,
